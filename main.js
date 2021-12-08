@@ -3,7 +3,10 @@ import {createRenderer} from "./renderer.js";
 import {renderPoints} from "./renderPoints.js";
 import {renderMesh} from "./renderMesh.js";
 import {renderWireframe} from "./renderWireframe.js";
+import {renderWireframeThick} from "./renderWireframeThick.js";
 import {cube, createPointCube } from "./cube.js";
+import {bunny} from "./bunny.js";
+import {mat4, vec3} from "./libs/gl-matrix/gl-matrix.js";
 
 let renderer = null;
 
@@ -11,11 +14,12 @@ let renderer = null;
 
 function loop(){
 
-	let view = renderer.context.getCurrentTexture().createView();
-
 	let renderPassDescriptor = {
 		colorAttachments: [
-			{view, loadValue: { r: 0.1, g: 0.2, b: 0.3, a: 1.0 }}
+			{
+				view: renderer.context.getCurrentTexture().createView(), 
+				loadValue: { r: 0.1, g: 0.2, b: 0.3, a: 1.0 }
+			}
 		],
 		depthStencilAttachment: {
 			view: renderer.depth.createView(),
@@ -30,9 +34,24 @@ function loop(){
 	const commandEncoder = renderer.device.createCommandEncoder();
 	const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
 
-	// renderPoints(pointCube, renderer, passEncoder);
-	// renderMesh(cube, renderer, passEncoder);
-	renderWireframe(cube, renderer, passEncoder);
+	let elMesh = document.getElementById("rendermode_mesh");
+	let elWireframe = document.getElementById("rendermode_wireframe");
+	let elWireframeThick = document.getElementById("rendermode_wireframe_thick");
+
+	let model = bunny;
+
+	let view = mat4.create();
+	mat4.translate(view, view, vec3.fromValues(0, 0, -4));
+	let now = performance.now() / 1000;
+	mat4.rotate(view, view, now, vec3.fromValues(0, 1, 0));
+
+	if(elMesh.checked){
+		renderMesh(model, view, renderer, passEncoder);
+	}else if(elWireframe.checked){
+		renderWireframe(model, view, renderer, passEncoder);
+	}else if(elWireframeThick.checked){
+		renderWireframeThick(model, view, renderer, passEncoder);
+	}
 
 	passEncoder.endPass();
 	let commandBuffer = commandEncoder.finish();

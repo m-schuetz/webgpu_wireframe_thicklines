@@ -35,10 +35,6 @@ struct VertexOutput {
 [[stage(vertex)]]
 fn main_vertex(vertex : VertexInput) -> VertexOutput {
 
-	_ = uniforms.world;
-	_ = positions.values[0];
-	_ = colors.values[0];
-
 	var position = vec4<f32>(
 		positions.values[3u * vertex.vertexID + 0u],
 		positions.values[3u * vertex.vertexID + 1u],
@@ -154,23 +150,14 @@ function getState(points, renderer){
 
 }
 
-function update(state, renderer){
+function update(state, view, renderer){
 
 	let world = mat4.create();
-
-	let view = mat4.create();
-	mat4.translate(view, view, vec3.fromValues(0, 0, -4));
 
 	let canvas = renderer.context.canvas;
 	let aspect = canvas.clientWidth / canvas.clientHeight;
 	let proj = mat4.create();
 	mat4.perspective(proj, (2 * Math.PI) / 5, aspect, 1, 100.0);
-	
-	let now = performance.now() / 1000;
-	mat4.rotate(view, view, 1,
-		vec3.fromValues(Math.sin(now), Math.cos(now), 0)
-	);
-
 
 	let data = new ArrayBuffer(256);
 	let f32 = new Float32Array(data);
@@ -186,11 +173,11 @@ function update(state, renderer){
 }
 
 
-export function renderMesh(geometry, renderer, passEncoder){
+export function renderMesh(geometry, view, renderer, passEncoder){
 
 	let state = getState(geometry, renderer);
 
-	update(state, renderer);
+	update(state, view, renderer);
 
 	passEncoder.setPipeline(state.pipeline);
 	passEncoder.setBindGroup(0, state.bindGroup);

@@ -35,10 +35,6 @@ struct VertexOutput {
 [[stage(vertex)]]
 fn main_vertex(vertex : VertexInput) -> VertexOutput {
 
-	_ = uniforms.world;
-	_ = positions.values[0];
-	_ = colors.values[0];
-
 	var position = vec4<f32>(
 		positions.values[3u * vertex.vertexID + 0u],
 		positions.values[3u * vertex.vertexID + 1u],

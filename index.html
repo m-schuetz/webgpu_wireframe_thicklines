@@ -1,16 +1,97 @@
 <html>
+<head>
+	<meta http-equiv="origin-trial" content="ApM2LRrizp8n6n1p9IaYNL9tbGYTRob0jgm5wOr1jPQeXXyKTqNbaZKaC2LgVTyizCde6tC6XL0ZeH28L/z3EAEAAABdeyJvcmlnaW4iOiJodHRwczovL3BvdHJlZS5vcmc6NDQzIiwiZmVhdHVyZSI6IldlYkdQVSIsImV4cGlyeSI6MTY0MzE1NTE5OSwiaXNTdWJkb21haW4iOnRydWV9">
+</head>
 <body>
 
 <style>
 
+body{
+	margin: 0px;
+	padding: 0px;
+}
+
 #canvas{
 	width: 100%;
 	height: 100%;
-	border:1px solid red;
+	margin: 0px;
+	padding: 0px;
+}
+
+#rendermode_container{
+	/* position: absolute;
+	left: 10px;
+	top: 10px; */
+	background-color: white;
+	padding: 5px;
+	border: 2px solid black;
+	font-family: Arial, Helvetica, sans-serif;
+}
+
+p, li{
+	/* text-align: justify; */
 }
 
 </style>
-<canvas id="canvas"></canvas>
+
+<div style="display: grid; width: 100%; height: 100%; grid-template-columns: 400px 1fr">
+	<div id="rendermode_container">
+		<b>Render Mode</b>
+		<form>
+		<fieldset>
+			<div>
+				<input type="radio" id="rendermode_mesh" name="rendermode" value="Mesh">
+				<label for="rendermode_mesh">Mesh</label> 
+			</div>
+
+			<div>
+				<input type="radio" id="rendermode_wireframe" name="rendermode" value="Wireframe">
+				<label for="rendermode_wireframe">Wireframe</label>
+			</div>
+			
+			<div>
+				<input type="radio" id="rendermode_wireframe_thick" name="rendermode" value="Thick Wireframe" checked>
+				<label for="rendermode_wireframe_thick">Thick Wireframe</label> 
+			</div>
+		</fieldset>
+		</form>
+
+		<p>
+			Render a single indexed triangle model as mesh, wireframe, or wireframe with thick lines, 
+			without the need to generate additional buffers for line rendering.
+		</p>
+		<p>
+			Uses <a href="https://xeolabs.com/pdfs/OpenGLInsights.pdf">vertex pulling</a> to let the vertex shader 
+			decide which vertices to load, which allows us to render indexed triangle meshes as wireframes or even thick-wireframes.
+
+			<ul>
+				<li>A normal wireframe is obtained by drawing 3 lines (6 vertices) per triangle. 
+					The vertex shader then uses the index buffer to load the triangle vertices in the order in which we need them to draw lines.
+					<br>
+					<a href="https://github.com/m-schuetz/webgpu_wireframe_thicklines/blob/master/renderWireframe.js">[code]</a>
+				</li>
+				<li>
+					A thick wireframe is obtained by rendering each of the 3 lines of a triangle as a quad (comprising 2 triangles).
+					For each triangle of the indexed model, we are drawing a total of 3 lines/quads = 6 triangles = 18 vertices.
+					Each of these 18 vertices belongs to one of three lines, 
+					and each vertex shader invocation loads the start and end of the corresponding line. The line is then projected to 
+					screen space, and the orthoginal of the screen-space line direction is used to shift the vertices of each quad into the appropriate directions 
+					to obtain a thick line.
+					<br>
+					<a href="https://github.com/m-schuetz/webgpu_wireframe_thicklines/blob/master/renderWireframeThick.js">[code]</a>
+				</li>
+
+			</ul>
+		</p>
+
+		<a href="https://github.com/m-schuetz/webgpu_wireframe_thicklines">[github]</a>
+	</div>
+	<div>
+		<canvas id="canvas"></canvas>
+	</div>
+</div>
+
+
 
 <script type="module">
 

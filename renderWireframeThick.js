@@ -33,36 +33,97 @@ struct VertexOutput {
 	[[location(0)]] color : vec4<f32>;
 };
 
+
+
 [[stage(vertex)]]
 fn main_vertex(vertex : VertexInput) -> VertexOutput {
 	
+	var lineWidth = 5.0;
+
 	var localToElement = array<u32, 6>(0u, 1u, 1u, 2u, 2u, 0u);
 
-	var triangleIndex = vertex.vertexID / 6u;
-	var localVertexIndex = vertex.vertexID % 6u;
+	var triangleIndex = vertex.vertexID / 18u;        // 18 vertices per triangle
+	var localVertexIndex = vertex.vertexID % 18u;     // 18 vertices
+	var localLineIndex = localVertexIndex / 6u;       // 3 lines, 6 vertices per line, 2 triangles per line
 
-	var elementIndexIndex = 3u * triangleIndex + localToElement[localVertexIndex];
-	var elementIndex = indices.values[elementIndexIndex];
+	var startElementIndex = indices.values[3u * triangleIndex + localLineIndex + 0u];
+	var endElementIndex = indices.values[3u * triangleIndex + (localLineIndex + 1u) % 3u];
 
-	var position = vec4<f32>(
-		positions.values[3u * elementIndex + 0u],
-		positions.values[3u * elementIndex + 1u],
-		positions.values[3u * elementIndex + 2u],
+	var start = vec4<f32>(
+		positions.values[3u * startElementIndex + 0u],
+		positions.values[3u * startElementIndex + 1u],
+		positions.values[3u * startElementIndex + 2u],
 		1.0
 	);
 
-	position = uniforms.proj * uniforms.view * uniforms.world * position;
+	var end = vec4<f32>(
+		positions.values[3u * endElementIndex + 0u],
+		positions.values[3u * endElementIndex + 1u],
+		positions.values[3u * endElementIndex + 2u],
+		1.0
+	);
 
-	var color_u32 = colors.values[elementIndex];
+	var localIndex = vertex.vertexID % 6u;
+
+	var position = start;
+	var currElementIndex = startElementIndex;
+	if(localIndex == 0u || localIndex == 3u|| localIndex == 5u){
+		position = start;
+		currElementIndex = startElementIndex;
+	}else{
+		position = end;
+		currElementIndex = endElementIndex;
+	}
+	
+	var worldPos = uniforms.world * position;
+	var viewPos = uniforms.view * worldPos;
+	var projPos = uniforms.proj * viewPos;
+
+	var dirScreen : vec2<f32>;
+	{
+		var projStart = uniforms.proj * uniforms.view * uniforms.world * start;
+		var projEnd = uniforms.proj * uniforms.view * uniforms.world * end;
+
+		var screenStart = projStart.xy / projStart.w;
+		var screenEnd = projEnd.xy / projEnd.w;
+
+		dirScreen = normalize(screenEnd - screenStart);
+	}
+
+	{ // apply pixel offsets to the 6 vertices of the quad
+
+		var pxOffset = vec2<f32>(1.0, 0.0);
+
+		// move vertices of quad sidewards
+		if(localIndex == 0u || localIndex == 1u || localIndex == 3u){
+			pxOffset = vec2<f32>(dirScreen.y, -dirScreen.x);
+		}else{
+			pxOffset = vec2<f32>(-dirScreen.y, dirScreen.x);
+		}
+
+		// move vertices of quad outwards
+		if(localIndex == 0u || localIndex == 3u || localIndex == 5u){
+			pxOffset = pxOffset - dirScreen;
+		}else{
+			pxOffset = pxOffset + dirScreen;
+		}
+
+		var screenDimensions = vec2<f32>(uniforms.screen_width, uniforms.screen_height);
+		var adjusted = projPos.xy / projPos.w + lineWidth * pxOffset / screenDimensions;
+		projPos = vec4<f32>(adjusted * projPos.w, projPos.zw);
+	}
+
+	var color_u32 = colors.values[currElementIndex];
 	var color = vec4<f32>(
 		f32((color_u32 >>  0u) & 0xFFu) / 255.0,
 		f32((color_u32 >>  8u) & 0xFFu) / 255.0,
 		f32((color_u32 >> 16u) & 0xFFu) / 255.0,
 		f32((color_u32 >> 24u) & 0xFFu) / 255.0,
 	);
+	// var color = vec4<f32>(0.0, 1.0, 0.0, 1.0);
 
 	var output : VertexOutput;
-	output.position = position;
+	output.position = projPos;
 	output.color = color;
 
 	return output;
@@ -110,7 +171,7 @@ function getState(points, renderer){
 				targets: [{format: renderer.format}],
 			},
 			primitive: {
-				topology: 'line-list',
+				topology: 'triangle-list',
 				cullMode: 'none',
 			},
 			depthStencil: {
@@ -170,6 +231,8 @@ function update(state, view, renderer){
 
 	let world = mat4.create();
 
+	
+
 	let canvas = renderer.context.canvas;
 	let aspect = canvas.clientWidth / canvas.clientHeight;
 	let proj = mat4.create();
@@ -177,10 +240,14 @@ function update(state, view, renderer){
 
 	let data = new ArrayBuffer(256);
 	let f32 = new Float32Array(data);
+	let dataView = new DataView(data);
 
 	f32.set(world, 0);
 	f32.set(view, 16);
 	f32.set(proj, 32);
+
+	dataView.setFloat32(3 * 64 + 0, canvas.clientWidth, true);
+	dataView.setFloat32(3 * 64 + 4, canvas.clientHeight, true);
 
 	renderer.device.queue.writeBuffer(
 		state.uniformBuffer, 
@@ -189,7 +256,7 @@ function update(state, view, renderer){
 }
 
 
-export function renderWireframe(geometry, view, renderer, passEncoder){
+export function renderWireframeThick(geometry, view, renderer, passEncoder){
 
 	let state = getState(geometry, renderer);
 
@@ -199,5 +266,5 @@ export function renderWireframe(geometry, view, renderer, passEncoder){
 	passEncoder.setBindGroup(0, state.bindGroup);
 
 	let numTriangles = geometry.indices.length / 3;
-	passEncoder.draw(6 * numTriangles, 1, 0, 0);
+	passEncoder.draw(3 * 6 * numTriangles, 1, 0, 0);
 }
