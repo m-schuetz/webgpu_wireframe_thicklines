@@ -28,7 +28,7 @@ decide which vertices to load, which allows us to render indexed triangle meshes
 	<li>
 		Quads are obtained by rendering two triangles for each vertex of the mesh. Any six consecutive vertices in the vertex shader load the same vertex of the mesh and place them such that they form a quad. The vertices are first transformed into view space, where they are then offset along the x and y axis.
 		<br>
-		<a href="https://github.com/m-schuetz/webgpu_wireframe_thicklines/blob/master/renderQuad.js">[code]</a>
+		<a href="https://github.com/m-schuetz/webgpu_wireframe_thicklines/blob/master/renderQuads.js">[code]</a>
 	</li>
 </ul>
 
