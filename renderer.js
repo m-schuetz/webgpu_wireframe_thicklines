@@ -5,14 +5,12 @@ export class Renderer{
 		this.adapter = null;
 		this.device = null;
 		this.context = null;
-		this.size = null;
 		this.format = null;
 		this.depthFormat = "depth32float";
 		
 		this.texture = null;
 		this.depth = null;
 		this.typedBuffers = new Map();
-
 	}
 
 	getGpuBuffer(typedArray){
@@ -42,9 +40,6 @@ export class Renderer{
 
 		return buffer;
 	}
-
-
-
 };
 
 export async function createRenderer(canvas){
@@ -53,33 +48,28 @@ export async function createRenderer(canvas){
 	canvas.height = canvas.clientHeight;
 
 	let adapter = await navigator.gpu.requestAdapter();
-	let device = await adapter.requestDevice();
+	let device  = await adapter.requestDevice();
 	let context = canvas.getContext('webgpu');
 
-	let devicePixelRatio = window.devicePixelRatio ?? 1;
-	let size = [
-		canvas.clientWidth * devicePixelRatio,
-		canvas.clientHeight * devicePixelRatio,
-	];
-	let format = context.getPreferredFormat(adapter);
-
-	context.configure({device, format, size});
+	context.configure({
+		device,
+		format: navigator.gpu.getPreferredCanvasFormat()
+	});
 
 	let texture = context.getCurrentTexture();
 	let depth = device.createTexture({
-		size: size,
-		format: "depth32float",
+		size: [canvas.width, canvas.height],
+		format: 'depth32float',
 		usage: GPUTextureUsage.RENDER_ATTACHMENT,
 	});
 
 	let renderer = new Renderer();
 	renderer.adapter = adapter;
-	renderer.device = device;
+	renderer.device  = device;
 	renderer.context = context;
-	renderer.size = size;
-	renderer.format = format;
+	renderer.format = navigator.gpu.getPreferredCanvasFormat();
 	renderer.texture = texture;
-	renderer.depth = depth;
+	renderer.depth   = depth;
 
 	return renderer;
 }

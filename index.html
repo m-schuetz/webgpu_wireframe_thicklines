@@ -50,13 +50,18 @@ p, li{
 			</div>
 			
 			<div>
-				<input type="radio" id="rendermode_wireframe_thick" name="rendermode" value="Thick Wireframe" checked>
+				<input type="radio" id="rendermode_wireframe_thick" name="rendermode" value="Thick Wireframe" >
 				<label for="rendermode_wireframe_thick">Thick Wireframe</label> 
+			</div>
+
+			<div>
+				<input type="radio" id="rendermode_quads" name="rendermode" value="Quads" checked>
+				<label for="rendermode_quads">Quads</label> 
 			</div>
 		</fieldset>
 		</form>
 
-		<p>
+		<!-- <p>
 			Render a single indexed triangle model as mesh, wireframe, or wireframe with thick lines, 
 			without the need to generate additional buffers for line rendering.
 		</p>
@@ -82,7 +87,7 @@ p, li{
 				</li>
 
 			</ul>
-		</p>
+		</p> -->
 
 		<a href="https://github.com/m-schuetz/webgpu_wireframe_thicklines">[github]</a>
 	</div>
@@ -94,10 +99,71 @@ p, li{
 
 
 <script type="module">
+	// adapted from https://github.com/toji/hello-triangle-webgpu 
 
-	import {init} from "./main.js";
+	import {bunny} from "./bunny.js";
+	import {cube} from "./cube.js";
+	import {mat4, vec3} from "./libs/gl-matrix/gl-matrix.js";
+	import {renderMesh} from "./renderMesh.js";
+	import {renderWireframe} from "./renderWireframe.js";
+	import {renderWireframeThick} from "./renderWireframeThick.js";
+	import {renderQuads} from "./renderQuads.js";
+	import {createRenderer} from "./renderer.js";
 
-	init();
+	let canvas  = document.getElementById("canvas");
+	let renderer = await createRenderer(canvas);
+
+	function loop(){
+
+		let renderPassDescriptor = {
+			colorAttachments: [{
+				view:         renderer.context.getCurrentTexture().createView(), 
+				loadOp:       "clear",
+				clearValue:   [0.1, 0.2, 0.3, 1.0],
+				storeOp:      "store",
+			}],
+			depthStencilAttachment: {
+				view:             renderer.depth.createView(),
+				depthClearValue:  1.0,
+				depthLoadOp:      "clear",
+				depthStoreOp:     "store",
+			},
+		};
+
+		let commandEncoder = renderer.device.createCommandEncoder();
+		let passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
+
+		let elMesh = document.getElementById("rendermode_mesh");
+		let elWireframe = document.getElementById("rendermode_wireframe");
+		let elWireframeThick = document.getElementById("rendermode_wireframe_thick");
+		let elQuads = document.getElementById("rendermode_quads");
+
+		let view = mat4.create();
+		mat4.translate(view, view, vec3.fromValues(0, 0, -4));
+		let now = performance.now() / 1000;
+		mat4.rotate(view, view, now, vec3.fromValues(0, 1, 0));
+
+		let model = bunny;
+		// let model = cube;
+
+		if(elMesh.checked){
+			renderMesh(model, view, renderer, passEncoder);
+		}else if(elWireframe.checked){
+			renderWireframe(model, view, renderer, passEncoder);
+		}else if(elWireframeThick.checked){
+			renderWireframeThick(model, view, renderer, passEncoder);
+		}else if(elQuads.checked){
+			renderQuads(model, view, renderer, passEncoder);
+		}
+
+		passEncoder.end();
+		let commandBuffer = commandEncoder.finish();
+		renderer.device.queue.submit([commandBuffer]);
+
+		requestAnimationFrame(loop);
+	}
+
+	loop();
 
 </script>
 
