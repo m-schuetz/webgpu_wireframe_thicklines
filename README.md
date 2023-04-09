@@ -35,10 +35,12 @@ decide which vertices to load, which allows us to render indexed triangle meshes
 
 <table>
 	<tr>
-	<td><img src="screenshot_mesh.png"></td>
-	<td><img src="screenshot_wireframe.png"></td>
-	<td><img src="screenshot_wireframe_thick.png"></td>
-	<td><img src="screenshot_quads.png"></td>
+		<td><img src="screenshot_mesh.png"></td>
+		<td><img src="screenshot_wireframe.png"></td>
+	</tr>
+	<tr>
+		<td><img src="screenshot_wireframe_thick.png"></td>
+		<td><img src="screenshot_quads.png"></td>
 	</tr>
 </table>
 
