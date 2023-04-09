@@ -141,6 +141,7 @@ p, li{
 		let view = mat4.create();
 		mat4.translate(view, view, vec3.fromValues(0, 0, -4));
 		let now = performance.now() / 1000;
+		now = 0.3;
 		mat4.rotate(view, view, now, vec3.fromValues(0, 1, 0));
 
 		let model = bunny;
