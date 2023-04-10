@@ -19,17 +19,10 @@ body{
 }
 
 #rendermode_container{
-	/* position: absolute;
-	left: 10px;
-	top: 10px; */
 	background-color: white;
 	padding: 5px;
 	border: 2px solid black;
 	font-family: Arial, Helvetica, sans-serif;
-}
-
-p, li{
-	/* text-align: justify; */
 }
 
 </style>
@@ -37,57 +30,6 @@ p, li{
 <div style="display: grid; width: 100%; height: 100%; grid-template-columns: 400px 1fr">
 	<div id="rendermode_container">
 		<b>Render Mode</b>
-		<form>
-		<fieldset>
-			<div>
-				<input type="radio" id="rendermode_mesh" name="rendermode" value="Mesh">
-				<label for="rendermode_mesh">Mesh</label> 
-			</div>
-
-			<div>
-				<input type="radio" id="rendermode_wireframe" name="rendermode" value="Wireframe">
-				<label for="rendermode_wireframe">Wireframe</label>
-			</div>
-			
-			<div>
-				<input type="radio" id="rendermode_wireframe_thick" name="rendermode" value="Thick Wireframe" checked>
-				<label for="rendermode_wireframe_thick">Thick Wireframe</label> 
-			</div>
-
-			<div>
-				<input type="radio" id="rendermode_quads" name="rendermode" value="Quads" >
-				<label for="rendermode_quads">Quads</label> 
-			</div>
-		</fieldset>
-		</form>
-
-		<!-- <p>
-			Render a single indexed triangle model as mesh, wireframe, or wireframe with thick lines, 
-			without the need to generate additional buffers for line rendering.
-		</p>
-		<p>
-			Uses <a href="https://xeolabs.com/pdfs/OpenGLInsights.pdf">vertex pulling</a> to let the vertex shader 
-			decide which vertices to load, which allows us to render indexed triangle meshes as wireframes or even thick-wireframes.
-
-			<ul>
-				<li>A normal wireframe is obtained by drawing 3 lines (6 vertices) per triangle. 
-					The vertex shader then uses the index buffer to load the triangle vertices in the order in which we need them to draw lines.
-					<br>
-					<a href="https://github.com/m-schuetz/webgpu_wireframe_thicklines/blob/master/renderWireframe.js">[code]</a>
-				</li>
-				<li>
-					A thick wireframe is obtained by rendering each of the 3 lines of a triangle as a quad (comprising 2 triangles).
-					For each triangle of the indexed model, we are drawing a total of 3 lines/quads = 6 triangles = 18 vertices.
-					Each of these 18 vertices belongs to one of three lines, 
-					and each vertex shader invocation loads the start and end of the corresponding line. The line is then projected to 
-					screen space, and the orthoginal of the screen-space line direction is used to shift the vertices of each quad into the appropriate directions 
-					to obtain a thick line.
-					<br>
-					<a href="https://github.com/m-schuetz/webgpu_wireframe_thicklines/blob/master/renderWireframeThick.js">[code]</a>
-				</li>
-
-			</ul>
-		</p> -->
 
 		<a href="https://github.com/m-schuetz/webgpu_wireframe_thicklines">[github]</a>
 	</div>
@@ -105,9 +47,7 @@ p, li{
 	import {cube} from "./cube.js";
 	import {mat4, vec3} from "./libs/gl-matrix/gl-matrix.js";
 	import {renderMesh} from "./renderMesh.js";
-	import {renderWireframe} from "./renderWireframe.js";
-	import {renderWireframeThick} from "./renderWireframeThick.js";
-	import {renderQuads} from "./renderQuads.js";
+	import {computeYarn} from "./computeYarn.js";
 	import {createRenderer} from "./renderer.js";
 
 	let canvas  = document.getElementById("canvas");
@@ -131,7 +71,6 @@ p, li{
 		};
 
 		let commandEncoder = renderer.device.createCommandEncoder();
-		let passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
 
 		let elMesh = document.getElementById("rendermode_mesh");
 		let elWireframe = document.getElementById("rendermode_wireframe");
@@ -143,18 +82,51 @@ p, li{
 		let now = performance.now() / 1000;
 		mat4.rotate(view, view, now, vec3.fromValues(0, 1, 0));
 
-		let model = bunny;
-		// let model = cube;
 
-		if(elMesh.checked){
-			renderMesh(model, view, renderer, passEncoder);
-		}else if(elWireframe.checked){
-			renderWireframe(model, view, renderer, passEncoder);
-		}else if(elWireframeThick.checked){
-			renderWireframeThick(model, view, renderer, passEncoder);
-		}else if(elQuads.checked){
-			renderQuads(model, view, renderer, passEncoder);
-		}
+		let numVertices = 100;
+
+		let bufIndirect = renderer.device.createBuffer({
+			size: 512,
+			usage: GPUBufferUsage.VERTEX 
+				| GPUBufferUsage.INDEX  
+				| GPUBufferUsage.COPY_DST 
+				| GPUBufferUsage.COPY_SRC 
+				| GPUBufferUsage.STORAGE
+				| GPUBufferUsage.INDIRECT,
+			mappedAtCreation: false,
+		});
+
+		let bufPositions = renderer.device.createBuffer({
+			size: 12 * numVertices,
+			usage: GPUBufferUsage.VERTEX 
+				| GPUBufferUsage.INDEX  
+				| GPUBufferUsage.COPY_DST 
+				| GPUBufferUsage.COPY_SRC 
+				| GPUBufferUsage.STORAGE,
+			mappedAtCreation: false,
+		});
+
+		let bufColors = renderer.device.createBuffer({
+			size: 4 * numVertices,
+			usage: GPUBufferUsage.VERTEX 
+				| GPUBufferUsage.INDEX  
+				| GPUBufferUsage.COPY_DST 
+				| GPUBufferUsage.COPY_SRC 
+				| GPUBufferUsage.STORAGE,
+			mappedAtCreation: false,
+		});
+
+		let model = {
+			numVertices,
+			positions: bufPositions,
+			colors: bufColors,
+			indirect: bufIndirect
+		};
+
+		computeYarn(model, view, renderer, commandEncoder);
+
+		let passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
+		renderMesh(model, view, renderer, passEncoder);
 
 		passEncoder.end();
 		let commandBuffer = commandEncoder.finish();

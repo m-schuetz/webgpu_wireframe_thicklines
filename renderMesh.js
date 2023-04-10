@@ -36,6 +36,8 @@ struct VertexOutput {
 @vertex
 fn main_vertex(vertex : VertexInput) -> VertexOutput {
 
+	var index = vertex.vertexID;
+
 	var position = vec4<f32>(
 		positions.values[3u * vertex.vertexID + 0u],
 		positions.values[3u * vertex.vertexID + 1u],
@@ -46,6 +48,10 @@ fn main_vertex(vertex : VertexInput) -> VertexOutput {
 	position = uniforms.proj * uniforms.view * uniforms.world * position;
 
 	var color_u32 = colors.values[vertex.vertexID];
+
+	color_u32 = index / 3u;
+	color_u32 = color_u32 * 50u;
+
 	var color = vec4<f32>(
 		f32((color_u32 >>  0u) & 0xFFu) / 255.0,
 		f32((color_u32 >>  8u) & 0xFFu) / 255.0,
@@ -83,9 +89,9 @@ const uniformBufferSize = 256;
 
 let states = new Map();
 
-function getState(points, renderer){
+function getState(model, renderer){
 
-	if(!states.has(points)){
+	if(!states.has(model)){
 		let {device} = renderer;
 
 		let module = device.createShaderModule({code: shaderCode});
@@ -139,35 +145,22 @@ function getState(points, renderer){
 			usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
 		});
 
-		let vboPositions = device.createBuffer({
-			size: points.positions.byteLength,
-			usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-		});
-
-		let vboColors = device.createBuffer({
-			size: points.colors.byteLength,
-			usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-		});
-
-		device.queue.writeBuffer(vboPositions, 0, points.positions.buffer, 0, points.positions.byteLength);
-		device.queue.writeBuffer(vboColors, 0, points.colors.buffer, 0, points.colors.byteLength);
-
 		let bindGroup = device.createBindGroup({
 			layout: pipeline.getBindGroupLayout(0),
 			entries: [
 				{binding: 0, resource: {buffer: uniformBuffer}},
-				{binding: 1, resource: {buffer: vboPositions}},
-				{binding: 2, resource: {buffer: vboColors}},
+				{binding: 1, resource: {buffer: model.positions}},
+				{binding: 2, resource: {buffer: model.colors}},
 			],
 		});
 
 		let state = {pipeline, uniformBuffer, bindGroup};
 
-		states.set(points, state);
+		states.set(model, state);
 
 		return state;
 	}else{
-		return states.get(points);
+		return states.get(model);
 	}
 
 
@@ -196,24 +189,15 @@ function update(state, view, renderer){
 }
 
 
-export function renderMesh(geometry, view, renderer, passEncoder){
+export function renderMesh(model, view, renderer, passEncoder){
 
-	let state = getState(geometry, renderer);
+	let state = getState(model, renderer);
 
 	update(state, view, renderer);
 
 	passEncoder.setPipeline(state.pipeline);
 	passEncoder.setBindGroup(0, state.bindGroup);
 
-	let vboPositions = renderer.getGpuBuffer(geometry.positions);
-	let vboColors = renderer.getGpuBuffer(geometry.colors);
-	let vboIndices = renderer.getGpuBuffer(geometry.indices);
-
-	passEncoder.setVertexBuffer(0, vboPositions);
-	passEncoder.setVertexBuffer(1, vboColors);
-
-	passEncoder.setIndexBuffer(vboIndices, "uint32", 0, geometry.indices.byteLength);
-
-	let numIndices = geometry.indices.length;
-	passEncoder.drawIndexed(numIndices);
+	// passEncoder.draw(model.numVertices, 1, 0, 0);
+	passEncoder.drawIndirect(model.indirect, 0);
 }
