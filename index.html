@@ -53,6 +53,45 @@ body{
 	let canvas  = document.getElementById("canvas");
 	let renderer = await createRenderer(canvas);
 
+	let vertexCapacity = 300_000;
+	let bufIndirect = renderer.device.createBuffer({
+		size: 512,
+		usage: GPUBufferUsage.VERTEX 
+			| GPUBufferUsage.INDEX  
+			| GPUBufferUsage.COPY_DST 
+			| GPUBufferUsage.COPY_SRC 
+			| GPUBufferUsage.STORAGE
+			| GPUBufferUsage.INDIRECT,
+		mappedAtCreation: false,
+	});
+
+	let bufPositions = renderer.device.createBuffer({
+		size: 12 * vertexCapacity,
+		usage: GPUBufferUsage.VERTEX 
+			| GPUBufferUsage.INDEX  
+			| GPUBufferUsage.COPY_DST 
+			| GPUBufferUsage.COPY_SRC 
+			| GPUBufferUsage.STORAGE,
+		mappedAtCreation: false,
+	});
+
+	let bufColors = renderer.device.createBuffer({
+		size: 4 * vertexCapacity,
+		usage: GPUBufferUsage.VERTEX 
+			| GPUBufferUsage.INDEX  
+			| GPUBufferUsage.COPY_DST 
+			| GPUBufferUsage.COPY_SRC 
+			| GPUBufferUsage.STORAGE,
+		mappedAtCreation: false,
+	});
+
+	let model = {
+		vertexCapacity,
+		positions: bufPositions,
+		colors: bufColors,
+		indirect: bufIndirect
+	};
+
 	function loop(){
 
 		let renderPassDescriptor = {
@@ -83,45 +122,9 @@ body{
 		mat4.rotate(view, view, now, vec3.fromValues(0, 1, 0));
 
 
-		let vertexCapacity = 300_000;
+		
 
-		let bufIndirect = renderer.device.createBuffer({
-			size: 512,
-			usage: GPUBufferUsage.VERTEX 
-				| GPUBufferUsage.INDEX  
-				| GPUBufferUsage.COPY_DST 
-				| GPUBufferUsage.COPY_SRC 
-				| GPUBufferUsage.STORAGE
-				| GPUBufferUsage.INDIRECT,
-			mappedAtCreation: false,
-		});
-
-		let bufPositions = renderer.device.createBuffer({
-			size: 12 * vertexCapacity,
-			usage: GPUBufferUsage.VERTEX 
-				| GPUBufferUsage.INDEX  
-				| GPUBufferUsage.COPY_DST 
-				| GPUBufferUsage.COPY_SRC 
-				| GPUBufferUsage.STORAGE,
-			mappedAtCreation: false,
-		});
-
-		let bufColors = renderer.device.createBuffer({
-			size: 4 * vertexCapacity,
-			usage: GPUBufferUsage.VERTEX 
-				| GPUBufferUsage.INDEX  
-				| GPUBufferUsage.COPY_DST 
-				| GPUBufferUsage.COPY_SRC 
-				| GPUBufferUsage.STORAGE,
-			mappedAtCreation: false,
-		});
-
-		let model = {
-			vertexCapacity,
-			positions: bufPositions,
-			colors: bufColors,
-			indirect: bufIndirect
-		};
+		
 
 		computeYarn(model, view, renderer, commandEncoder);
 

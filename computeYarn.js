@@ -1,8 +1,8 @@
 
 import {mat4, vec3} from "./libs/gl-matrix/gl-matrix.js";
 
-let numWorkgroups = 2;
-let workgroupSize = 128;
+let numWorkgroups = 1;
+let workgroupSize = 32;
 
 let shaderCode = `
 struct Uniforms {
@@ -43,6 +43,11 @@ struct VertexOutput {
 @compute @workgroup_size(${workgroupSize})
 fn main(@builtin(global_invocation_id) invocationID : vec3<u32>){
 
+	// each invocation produces one segment
+	var sides = 12u;
+	var trisPerSeg = sides * 2u;
+	var verticesPerSec = trisPerSeg * 3u;
+
 	var index = invocationID.x;
 	var PI = 3.1415f;
 
@@ -52,8 +57,8 @@ fn main(@builtin(global_invocation_id) invocationID : vec3<u32>){
 		indirectArgs.firstInstance = 0u;
 	}
 
-	// triangle index in target buffer
-	var targetIndex = atomicAdd(&indirectArgs.vertexCount, 3u) / 3u;
+	// segment index in target buffer
+	var targetIndex = atomicAdd(&indirectArgs.vertexCount, verticesPerSec) / verticesPerSec;
 
 	_ = uniforms.numWorkgroups;
 
@@ -62,35 +67,90 @@ fn main(@builtin(global_invocation_id) invocationID : vec3<u32>){
 	var u0 = f32(targetIndex + 0u) / f32(numThreads);
 	var u1 = f32(targetIndex + 1u) / f32(numThreads);
 
-	var p0 = vec3<f32>(
-		cos(2.0f * PI * u0),
-		sin(2.0f * PI * u0),
-		0.0f,
-	);
+	// var u = f32(targetIndex) / f32(numThreads);
 
-	var p1 = vec3<f32>(
-		cos(2.0f * PI * u1),
-		sin(2.0f * PI * u1),
-		0.0f,
-	);
 
-	var p2 = vec3<f32>(0.0f, 0.0f, 0.0f);
+	
+	for(var i = 0u; i < sides; i++){
 
-	positions.values[9u * targetIndex + 0] = p0.x;
-	positions.values[9u * targetIndex + 1] = p0.y;
-	positions.values[9u * targetIndex + 2] = p0.z;
+		var v0 = f32(i + 0u) / f32(sides);
+		var v1 = f32(i + 1u) / f32(sides);
 
-	positions.values[9u * targetIndex + 3] = p1.x;
-	positions.values[9u * targetIndex + 4] = p1.y;
-	positions.values[9u * targetIndex + 5] = p1.z;
+		var c0 = vec2<f32>(cos(2.0f * PI * v0), sin(2.0f * PI * v0));
+		var c1 = vec2<f32>(cos(2.0f * PI * v1), sin(2.0f * PI * v1));
 
-	positions.values[9u * targetIndex + 6] = p2.x;
-	positions.values[9u * targetIndex + 7] = p2.y;
-	positions.values[9u * targetIndex + 8] = p2.z;
+		var p3 = vec3<f32>(32.0f * u0, c0.x, c0.y);
+		var p2 = vec3<f32>(32.0f * u1, c0.x, c0.y);
+		var p1 = vec3<f32>(32.0f * u1, c1.x, c1.y);
+		var p0 = vec3<f32>(32.0f * u0, c1.x, c1.y);
 
-	colors.values[3u * targetIndex + 0] = 0xff <<  0u;
-	colors.values[3u * targetIndex + 1] = 0xff <<  8u;
-	colors.values[3u * targetIndex + 2] = 0xff << 16u;
+		// each side generates 
+		// - two tris
+		// - 6 vertices
+		// - 18 floats
+		var triOffset = 18u * i + targetIndex;
+		positions.values[triOffset +  0] = p0.x;
+		positions.values[triOffset +  1] = p0.y;
+		positions.values[triOffset +  2] = p0.z;
+ 
+		positions.values[triOffset +  3] = p1.x;
+		positions.values[triOffset +  4] = p1.y;
+		positions.values[triOffset +  5] = p1.z;
+ 
+		positions.values[triOffset +  6] = p2.x;
+		positions.values[triOffset +  7] = p2.y;
+		positions.values[triOffset +  8] = p2.z;
+
+		positions.values[triOffset +  9] = p0.x;
+		positions.values[triOffset + 10] = p0.y;
+		positions.values[triOffset + 11] = p0.z;
+
+		positions.values[triOffset + 12] = p2.x;
+		positions.values[triOffset + 13] = p2.y;
+		positions.values[triOffset + 14] = p2.z;
+
+		positions.values[triOffset + 15] = p3.x;
+		positions.values[triOffset + 16] = p3.y;
+		positions.values[triOffset + 17] = p3.z;
+
+		colors.values[targetIndex + 6u * i + 0] = 0xff <<  0u;
+		colors.values[targetIndex + 6u * i + 1] = 0xff <<  8u;
+		colors.values[targetIndex + 6u * i + 2] = 0xff << 16u;
+		colors.values[targetIndex + 6u * i + 3] = 0xff <<  0u;
+		colors.values[targetIndex + 6u * i + 4] = 0xff <<  8u;
+		colors.values[targetIndex + 6u * i + 5] = 0xff << 16u;
+	}
+
+
+	// var p0 = vec3<f32>(
+	// 	cos(2.0f * PI * u0),
+	// 	sin(2.0f * PI * u0),
+	// 	0.0f,
+	// );
+
+	// var p1 = vec3<f32>(
+	// 	cos(2.0f * PI * u1),
+	// 	sin(2.0f * PI * u1),
+	// 	0.0f,
+	// );
+
+	// var p2 = vec3<f32>(0.0f, 0.0f, 0.0f);
+
+	// positions.values[9u * targetIndex + 0] = p0.x;
+	// positions.values[9u * targetIndex + 1] = p0.y;
+	// positions.values[9u * targetIndex + 2] = p0.z;
+
+	// positions.values[9u * targetIndex + 3] = p1.x;
+	// positions.values[9u * targetIndex + 4] = p1.y;
+	// positions.values[9u * targetIndex + 5] = p1.z;
+
+	// positions.values[9u * targetIndex + 6] = p2.x;
+	// positions.values[9u * targetIndex + 7] = p2.y;
+	// positions.values[9u * targetIndex + 8] = p2.z;
+
+	// colors.values[3u * targetIndex + 0] = 0xff <<  0u;
+	// colors.values[3u * targetIndex + 1] = 0xff <<  8u;
+	// colors.values[3u * targetIndex + 2] = 0xff << 16u;
 
 }
 `;
