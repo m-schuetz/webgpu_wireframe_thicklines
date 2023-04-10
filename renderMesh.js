@@ -49,9 +49,6 @@ fn main_vertex(vertex : VertexInput) -> VertexOutput {
 
 	var color_u32 = colors.values[vertex.vertexID];
 
-	color_u32 = index / 3u;
-	color_u32 = color_u32 * 50u;
-
 	var color = vec4<f32>(
 		f32((color_u32 >>  0u) & 0xFFu) / 255.0,
 		f32((color_u32 >>  8u) & 0xFFu) / 255.0,
@@ -62,6 +59,15 @@ fn main_vertex(vertex : VertexInput) -> VertexOutput {
 	var output : VertexOutput;
 	output.position = position;
 	output.color = color;
+
+	// var offset = 6u;
+	// if(index == offset + 0u){
+	// 	output.position = vec4<f32>(0.0f, 0.0f, 0.5f, 1.0f);
+	// }else if(index == offset + 1u){
+	// 	output.position = vec4<f32>(0.5f, 0.0f, 0.5f, 1.0f);
+	// }else if(index == offset + 2u){
+	// 	output.position = vec4<f32>(0.5f, 0.5f, 0.5f, 1.0f);
+	// }
 
 	return output;
 }
@@ -198,6 +204,5 @@ export function renderMesh(model, view, renderer, passEncoder){
 	passEncoder.setPipeline(state.pipeline);
 	passEncoder.setBindGroup(0, state.bindGroup);
 
-	// passEncoder.draw(model.numVertices, 1, 0, 0);
 	passEncoder.drawIndirect(model.indirect, 0);
 }

@@ -83,7 +83,7 @@ body{
 		mat4.rotate(view, view, now, vec3.fromValues(0, 1, 0));
 
 
-		let numVertices = 100;
+		let vertexCapacity = 300_000;
 
 		let bufIndirect = renderer.device.createBuffer({
 			size: 512,
@@ -97,7 +97,7 @@ body{
 		});
 
 		let bufPositions = renderer.device.createBuffer({
-			size: 12 * numVertices,
+			size: 12 * vertexCapacity,
 			usage: GPUBufferUsage.VERTEX 
 				| GPUBufferUsage.INDEX  
 				| GPUBufferUsage.COPY_DST 
@@ -107,7 +107,7 @@ body{
 		});
 
 		let bufColors = renderer.device.createBuffer({
-			size: 4 * numVertices,
+			size: 4 * vertexCapacity,
 			usage: GPUBufferUsage.VERTEX 
 				| GPUBufferUsage.INDEX  
 				| GPUBufferUsage.COPY_DST 
@@ -117,7 +117,7 @@ body{
 		});
 
 		let model = {
-			numVertices,
+			vertexCapacity,
 			positions: bufPositions,
 			colors: bufColors,
 			indirect: bufIndirect

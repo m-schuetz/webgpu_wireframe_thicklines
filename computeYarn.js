@@ -1,9 +1,13 @@
 
 import {mat4, vec3} from "./libs/gl-matrix/gl-matrix.js";
 
+let numWorkgroups = 2;
+let workgroupSize = 128;
+
 let shaderCode = `
 struct Uniforms {
-	numVertices   : u32,
+	numWorkgroups   : u32,
+	workgroupSize   : u32,
 };
 
 struct U32s {
@@ -36,7 +40,7 @@ struct VertexOutput {
 	@location(0)         color    : vec4<f32>,
 };
 
-@compute @workgroup_size(128)
+@compute @workgroup_size(${workgroupSize})
 fn main(@builtin(global_invocation_id) invocationID : vec3<u32>){
 
 	var index = invocationID.x;
@@ -44,17 +48,19 @@ fn main(@builtin(global_invocation_id) invocationID : vec3<u32>){
 
 	if(index == 0u){
 		indirectArgs.instanceCount = 1u;
-		indirectArgs.firstVertex = 0u;
+		indirectArgs.firstVertex   = 0u;
 		indirectArgs.firstInstance = 0u;
 	}
 
 	// triangle index in target buffer
-	var targetIndex = atomicAdd(&indirectArgs.vertexCount, 3u);
+	var targetIndex = atomicAdd(&indirectArgs.vertexCount, 3u) / 3u;
 
-	_ = uniforms.numVertices;
+	_ = uniforms.numWorkgroups;
 
-	var u0 = f32(index + 0u) / 10.0f;
-	var u1 = f32(index + 1u) / 10.0f;
+	var numThreads = uniforms.numWorkgroups * uniforms.workgroupSize;
+	numThreads = ${numWorkgroups * workgroupSize}u;
+	var u0 = f32(targetIndex + 0u) / f32(numThreads);
+	var u1 = f32(targetIndex + 1u) / f32(numThreads);
 
 	var p0 = vec3<f32>(
 		cos(2.0f * PI * u0),
@@ -85,6 +91,7 @@ fn main(@builtin(global_invocation_id) invocationID : vec3<u32>){
 	colors.values[3u * targetIndex + 0] = 0xff <<  0u;
 	colors.values[3u * targetIndex + 1] = 0xff <<  8u;
 	colors.values[3u * targetIndex + 2] = 0xff << 16u;
+
 }
 `;
 
@@ -140,7 +147,8 @@ function update(state, renderer, model){
 	let data = new ArrayBuffer(256);
 	let view = new DataView(data);
 
-	view.setUint32(0, model.numVertices, true);
+	view.setUint32(0, numWorkgroups, true);
+	view.setUint32(4, workgroupSize, true);
 
 	renderer.device.queue.writeBuffer(
 		state.uniformBuffer, 
@@ -177,9 +185,7 @@ export function computeYarn(model, view, renderer, commandEncoder){
 	passEncoder.setPipeline(state.pipeline);
 	passEncoder.setBindGroup(0, state.bindGroup);
 
-	let numVertices = model.numVertices;
-	let workgroupSize = 128;
-	passEncoder.dispatchWorkgroups(Math.ceil(numVertices / workgroupSize));
+	passEncoder.dispatchWorkgroups(numWorkgroups);
 	passEncoder.end();
 
 
