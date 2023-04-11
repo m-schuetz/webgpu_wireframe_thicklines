@@ -66,6 +66,17 @@ fn sample(t : f32, h : f32, a : f32, d : f32) -> vec3<f32> {
 	return vec3<f32>(x, y, z);
 }
 
+fn drawLine(start : vec3<f32>, end : vec3<f32>, color : u32){
+
+	var line = Line();
+	line.start = start;
+	line.end = end;
+	line.color = color;
+
+	var lineIndex = atomicAdd(&indirectArgsLines.vertexCount, 2u) / 2u;
+	lines[lineIndex] = line;
+}
+
 fn createYarn(threadID : u32, h : f32, a : f32, d : f32, offset : vec3<f32>){
 	// var r = 1.0f;
 	var r = uniforms.thickness;
@@ -89,7 +100,7 @@ fn createYarn(threadID : u32, h : f32, a : f32, d : f32, offset : vec3<f32>){
 	var numThreads = uniforms.numWorkgroups * uniforms.workgroupSize;
 	numThreads = ${numWorkgroups * workgroupSize}u;
 	var u0 = (f32(index) + 0.0f) / f32(numThreads);
-	var u1 = (f32(index) + 1.5f) / f32(numThreads);
+	var u1 = (f32(index) + 1.0f) / f32(numThreads);
 
 	var up = vec3<f32>(0.0f, 1.0f, 0.0f);
 	var l0 = sample(factor * u0, h, a, d);
@@ -117,49 +128,10 @@ fn createYarn(threadID : u32, h : f32, a : f32, d : f32, offset : vec3<f32>){
 		p1 = scale * p1 + offset;
 		p0 = scale * p0 + offset;
 
-		// {
-		// 	var line = Line();
-		// 	line.start = l0 * scale;
-		// 	line.end = l1 * scale;
-		// 	line.color = 0x0000ff00;
-
-		// 	var lineIndex = atomicAdd(&indirectArgsLines.vertexCount, 2u) / 2u;
-		// 	lines[lineIndex] = line;
-		// }
-
-		// {
-		// 	var line = Line();
-
-		// 	var d = normalize(l1 - lm);
-		// 	var n = vec3<f32>(d.x, d.z, d.y);
-
-		// 	line.start = l0;
-		// 	line.end = l0 + n;
-		// 	line.color = 0x000000ff;
-
-		// 	var lineIndex = atomicAdd(&indirectArgsLines.vertexCount, 2u) / 2u;
-		// 	lines[lineIndex] = line;
-		// }
-
-		// {
-		// 	var line = Line();
-		// 	line.start = l0;
-		// 	line.end = l0 + N;
-		// 	line.color = 0x0000ffff;
-
-		// 	var lineIndex = atomicAdd(&indirectArgsLines.vertexCount, 2u) / 2u;
-		// 	lines[lineIndex] = line;
-		// }
-
-		// {
-		// 	var line = Line();
-		// 	line.start = l0;
-		// 	line.end = l0 + T;
-		// 	line.color = 0x00ff0000;
-
-		// 	var lineIndex = atomicAdd(&indirectArgsLines.vertexCount, 2u) / 2u;
-		// 	lines[lineIndex] = line;
-		// }
+		// some lines as debug output
+		drawLine(l0 * scale + offset, l1 * scale + offset, 0x000000ff);
+		drawLine(l0 + offset, l0 + offset + 1.5f * N, 0x0000ffff);
+		drawLine(l0 + offset, l0 + offset + 1.5f * T, 0x00ff0000);
 
 		// each side generates 
 		// - two tris
@@ -204,11 +176,6 @@ fn createYarn(threadID : u32, h : f32, a : f32, d : f32, offset : vec3<f32>){
 		var diff = clamp(diff0 + diff1, 0.0f, 1.0f);
 		var ambient = vec3<f32>(0.2f, 0.2f, 0.2f);
 
-		// var color = 
-		// 	(u32(255.0f * N.x) <<  0u) +
-		// 	(u32(255.0f * N.y) <<  8u) +
-		// 	(u32(255.0f * N.z) << 16u);
-
 		var color = 
 			(u32(255.0f * diff + ambient.x) <<  0u) +
 			(u32(255.0f * diff + ambient.y) <<  8u) +
@@ -246,9 +213,9 @@ fn main(@builtin(global_invocation_id) invocationID : vec3<u32>){
 	var a = uniforms.a;
 	var d = uniforms.d;
 	createYarn(invocationID.x, h, a, d, vec3<f32>(-20.0f, 0.0f * h - 5.0f, 0.0f));
-	createYarn(invocationID.x, h, a, d, vec3<f32>(-20.0f, 1.0f * h - 5.0f, 0.0f));
-	createYarn(invocationID.x, h, a, d, vec3<f32>(-20.0f, 2.0f * h - 5.0f, 0.0f));
-	createYarn(invocationID.x, h, a, d, vec3<f32>(-20.0f, 3.0f * h - 5.0f, 0.0f));
+	// createYarn(invocationID.x, h, a, d, vec3<f32>(-20.0f, 1.0f * h - 5.0f, 0.0f));
+	// createYarn(invocationID.x, h, a, d, vec3<f32>(-20.0f, 2.0f * h - 5.0f, 0.0f));
+	// createYarn(invocationID.x, h, a, d, vec3<f32>(-20.0f, 3.0f * h - 5.0f, 0.0f));
 }
 `;
 

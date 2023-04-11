@@ -29,6 +29,9 @@ body{
 
 <div style="display: grid; width: 100%; height: 100%; grid-template-columns: 400px 1fr">
 	<div id="rendermode_container">
+
+		Attempt at implementing <a href="https://twitter.com/keenanisalive/status/1640371889846771713" target="_blank">
+			Keenan Crane's yarn function</a> in WebGPU.
 		
 		<div>
 			<input type="range" id="val_h" name="h" min="0" max="5" step="0.1" value="4.0">
@@ -46,7 +49,23 @@ body{
 			<input type="range" id="val_thickness" name="thickness" min="0.1" max="5" step="0.1" value="1.0">
 			<label for="thickness">thickness</label>
 		</div>
+		<div>
+			<input type="checkbox" id="val_animate" name="animate" checked>
+			<label for="animate">animate</label>
+		</div>
+		<div>
+			<input type="checkbox" id="val_show_yarn" name="show_yarn" checked>
+			<label for="show_yarn">show yarn</label>
+		</div>
+		<div>
+			<input type="checkbox" id="val_show_lines" name="show_lines">
+			<label for="show_lines">show lines</label>
+		</div>
 
+		<br>
+		Uses a compute shader to create the geometry, and an indirect draw call to render it.
+
+		<br><br>
 		<a href="https://github.com/m-schuetz/webgpu_wireframe_thicklines">[github]</a>
 	</div>
 	<div>
@@ -136,9 +155,22 @@ body{
 		buffer: bufLines,
 	};
 
-	// let el_h = document.getElementById("val_h");
+	let el_animate = document.getElementById("val_animate");
+	let el_show_yarn = document.getElementById("val_show_yarn");
+	let el_show_lines = document.getElementById("val_show_lines");
+
+	let lastTime = performance.now() / 1000;
+	let time = 0;
 
 	function loop(){
+
+		let now = performance.now() / 1000;
+		let timeSinceLastFrame = now - lastTime;
+		lastTime = now;
+
+		if(el_animate.checked){
+			time = time + timeSinceLastFrame / 3.0;
+		}
 
 		let renderPassDescriptor = {
 			colorAttachments: [{
@@ -164,16 +196,22 @@ body{
 
 		let view = mat4.create();
 		mat4.translate(view, view, vec3.fromValues(0, 0, -30));
-		let now = performance.now() / 3000;
+		// let now = performance.now() / 3000;
 		// now = .294;
-		mat4.rotate(view, view, now, vec3.fromValues(0, 1, 0));
+		mat4.rotate(view, view, time, vec3.fromValues(0, 1, 0));
 
 
 		computeYarn(model, lines, view, renderer, commandEncoder);
 
 		let passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
-		renderMesh(model, view, renderer, passEncoder);
-		renderLines(lines, view, renderer, passEncoder);
+
+		if(el_show_yarn.checked){
+			renderMesh(model, view, renderer, passEncoder);
+		}
+
+		if(el_show_lines.checked){
+			renderLines(lines, view, renderer, passEncoder);
+		}
 
 		passEncoder.end();
 		let commandBuffer = commandEncoder.finish();
