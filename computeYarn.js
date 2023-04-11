@@ -1,13 +1,17 @@
 
 import {mat4, vec3} from "./libs/gl-matrix/gl-matrix.js";
 
-let numWorkgroups = 1;
-let workgroupSize = 32;
+let numWorkgroups = 3;
+let workgroupSize = 128;
 
 let shaderCode = `
 struct Uniforms {
 	numWorkgroups   : u32,
 	workgroupSize   : u32,
+	h               : f32,
+	a               : f32,
+	d               : f32,
+	thickness       : f32,
 };
 
 struct U32s {
@@ -25,10 +29,19 @@ struct IndirectArgs{
 	firstInstance : u32,
 };
 
+struct Line{
+	start  : vec3<f32>,
+	end    : vec3<f32>,
+	color  : u32,
+};
+
 @binding(0) @group(0) var<uniform> uniforms                  : Uniforms;
 @binding(1) @group(0) var<storage, read_write> positions     : F32s;
 @binding(2) @group(0) var<storage, read_write> colors        : U32s;
 @binding(3) @group(0) var<storage, read_write> indirectArgs  : IndirectArgs;
+
+@binding(4) @group(0) var<storage, read_write> indirectArgsLines  : IndirectArgs;
+@binding(5) @group(0) var<storage, read_write> lines         : array<Line>;
 
 struct VertexInput {
 	@builtin(instance_index)   instanceID : u32,
@@ -40,36 +53,33 @@ struct VertexOutput {
 	@location(0)         color    : vec4<f32>,
 };
 
-fn sample(t : f32) -> vec3<f32> {
+fn sample(t : f32, h : f32, a : f32, d : f32) -> vec3<f32> {
 
-	var h = 1.0f;
+	// var h = 1.0f;
+	// var a = 1.0f;
+	// var d = 1.0f;
 
-	var x = t;
+	var x = t + a * sin(2.0f * t);
 	var y = h * cos(t);
-	var z = 0.0f;
+	var z = d * cos(2.0f * t);
 
 	return vec3<f32>(x, y, z);
 }
 
-@compute @workgroup_size(${workgroupSize})
-fn main(@builtin(global_invocation_id) invocationID : vec3<u32>){
-
-	var r = 0.1f;
-	var scale = 0.5f;
+fn createYarn(threadID : u32, h : f32, a : f32, d : f32, offset : vec3<f32>){
+	// var r = 1.0f;
+	var r = uniforms.thickness;
+	var scale = 1.0f;
+	var factor = 40.0f;
 
 	// each invocation produces one segment
-	var sides = 12u;
+	var sides = 24u;
 	var trisPerSeg = sides * 2u;
 	var verticesPerSec = trisPerSeg * 3u;
 
-	var index = invocationID.x;
+	// var index = invocationID.x;
+	var index = threadID;
 	var PI = 3.1415f;
-
-	if(index == 0u){
-		indirectArgs.instanceCount = 1u;
-		indirectArgs.firstVertex   = 0u;
-		indirectArgs.firstInstance = 0u;
-	}
 
 	// segment index in target buffer
 	var targetIndex = atomicAdd(&indirectArgs.vertexCount, verticesPerSec) / verticesPerSec;
@@ -78,50 +88,78 @@ fn main(@builtin(global_invocation_id) invocationID : vec3<u32>){
 
 	var numThreads = uniforms.numWorkgroups * uniforms.workgroupSize;
 	numThreads = ${numWorkgroups * workgroupSize}u;
-	var u0 = f32(targetIndex + 0u) / f32(numThreads);
-	var u1 = f32(targetIndex + 1u) / f32(numThreads);
+	var u0 = (f32(index) + 0.0f) / f32(numThreads);
+	var u1 = (f32(index) + 1.5f) / f32(numThreads);
 
 	var up = vec3<f32>(0.0f, 1.0f, 0.0f);
-	var l0 = sample(5.0f * u0);
-	var l1 = sample(5.0f * u1);
+	var l0 = sample(factor * u0, h, a, d);
+	var l1 = sample(factor * u1, h, a, d);
+
 	var dir = normalize(l1 - l0);
 	var N = normalize(cross(dir, up));
-	// var N = normalize(cross(dir, up));
 	var T = normalize(cross(N, dir));
-	
+
 	for(var i = 0u; i < sides; i++){
 
 		var v0 = f32(i + 0u) / f32(sides);
 		var v1 = f32(i + 1u) / f32(sides);
 
-		// var c0 = r * vec3<f32>(cos(2.0f * PI * v0), sin(2.0f * PI * v0), 0.0f);
-		// var c1 = r * vec3<f32>(cos(2.0f * PI * v1), sin(2.0f * PI * v1), 0.0f);
-
-		// var c0 = N * cos(2.0f * PI * v0) + T * sin(2.0f * PI * v0);
-		// var c1 = N * cos(2.0f * PI * v1) + T * sin(2.0f * PI * v1);
-
-		T = normalize(vec3<f32>(dir.y, dir.x, dir.z));
-		N = normalize(vec3<f32>(T.z, T.y, T.x));
-		// var c0 = N * cos(2.0f * PI * v0);
-		// var c1 = N * cos(2.0f * PI * v1);
 		var c0 = T * cos(2.0f * PI * v0) + N * sin(2.0f * PI * v0);
 		var c1 = T * cos(2.0f * PI * v1) + N * sin(2.0f * PI * v1);
 
-		var p3 = l0 + vec3<f32>(0.0f, c0.y, c0.x);
-		var p2 = l1 + vec3<f32>(0.0f, c0.y, c0.x);
-		var p1 = l1 + vec3<f32>(0.0f, c1.y, c1.x);
-		var p0 = l0 + vec3<f32>(0.0f, c1.y, c1.x);
+		var p3 = l0 + r * c0;
+		var p2 = l1 + r * c0;
+		var p1 = l1 + r * c1;
+		var p0 = l0 + r * c1;
 
+		p3 = scale * p3 + offset;
+		p2 = scale * p2 + offset;
+		p1 = scale * p1 + offset;
+		p0 = scale * p0 + offset;
 
-		// p3 = p3 * scale;
-		// p2 = p2 * scale;
-		// p1 = p1 * scale;
-		// p0 = p0 * scale;
+		// {
+		// 	var line = Line();
+		// 	line.start = l0 * scale;
+		// 	line.end = l1 * scale;
+		// 	line.color = 0x0000ff00;
 
-		// var p3 = vec3<f32>(u0, c0.x, c0.y);
-		// var p2 = vec3<f32>(u1, c0.x, c0.y);
-		// var p1 = vec3<f32>(u1, c1.x, c1.y);
-		// var p0 = vec3<f32>(u0, c1.x, c1.y);
+		// 	var lineIndex = atomicAdd(&indirectArgsLines.vertexCount, 2u) / 2u;
+		// 	lines[lineIndex] = line;
+		// }
+
+		// {
+		// 	var line = Line();
+
+		// 	var d = normalize(l1 - lm);
+		// 	var n = vec3<f32>(d.x, d.z, d.y);
+
+		// 	line.start = l0;
+		// 	line.end = l0 + n;
+		// 	line.color = 0x000000ff;
+
+		// 	var lineIndex = atomicAdd(&indirectArgsLines.vertexCount, 2u) / 2u;
+		// 	lines[lineIndex] = line;
+		// }
+
+		// {
+		// 	var line = Line();
+		// 	line.start = l0;
+		// 	line.end = l0 + N;
+		// 	line.color = 0x0000ffff;
+
+		// 	var lineIndex = atomicAdd(&indirectArgsLines.vertexCount, 2u) / 2u;
+		// 	lines[lineIndex] = line;
+		// }
+
+		// {
+		// 	var line = Line();
+		// 	line.start = l0;
+		// 	line.end = l0 + T;
+		// 	line.color = 0x00ff0000;
+
+		// 	var lineIndex = atomicAdd(&indirectArgsLines.vertexCount, 2u) / 2u;
+		// 	lines[lineIndex] = line;
+		// }
 
 		// each side generates 
 		// - two tris
@@ -152,8 +190,29 @@ fn main(@builtin(global_invocation_id) invocationID : vec3<u32>){
 		positions.values[triOffset + 16] = p3.y;
 		positions.values[triOffset + 17] = p3.z;
 
-		var color = u32(128.0f * cos(2.0f * PI * v0) + 128.0f);
-		// var color = u32(255.0f * u0);
+		var d0 = p1 - p0;
+		var d1 = p2 - p0;
+		var N = normalize(cross(d0, d1));
+		var light0 = vec3<f32>(10.0f, 10.0f, 10.0f);
+		var light1 = vec3<f32>(-10.0f, 10.0f, -10.0f);
+		
+		var L0 = normalize(light0 - p0);
+		var L1 = normalize(light1 - p0);
+
+		var diff0 = clamp(dot(N, L0), 0.0f, 1.0f);
+		var diff1 = clamp(dot(N, L1), 0.0f, 1.0f);
+		var diff = clamp(diff0 + diff1, 0.0f, 1.0f);
+		var ambient = vec3<f32>(0.2f, 0.2f, 0.2f);
+
+		// var color = 
+		// 	(u32(255.0f * N.x) <<  0u) +
+		// 	(u32(255.0f * N.y) <<  8u) +
+		// 	(u32(255.0f * N.z) << 16u);
+
+		var color = 
+			(u32(255.0f * diff + ambient.x) <<  0u) +
+			(u32(255.0f * diff + ambient.y) <<  8u) +
+			(u32(255.0f * diff + ambient.z) << 16u);
 
 		var triOffset_col = 6u * i + targetIndex * verticesPerSec; 
 		colors.values[triOffset_col + 0] = color;
@@ -163,7 +222,33 @@ fn main(@builtin(global_invocation_id) invocationID : vec3<u32>){
 		colors.values[triOffset_col + 4] = color;
 		colors.values[triOffset_col + 5] = color;
 	}
+}
 
+@compute @workgroup_size(${workgroupSize})
+fn main(@builtin(global_invocation_id) invocationID : vec3<u32>){
+
+
+
+	_ = indirectArgsLines.instanceCount;
+	_ = lines[0];
+
+	if(invocationID.x == 0u){
+		indirectArgs.instanceCount = 1u;
+		indirectArgs.firstVertex   = 0u;
+		indirectArgs.firstInstance = 0u;
+	}
+
+	// createYarn(invocationID.x, 1.0f, 1.0f, 1.0f);
+	// createYarn(invocationID.x, 2.0f, 1.0f, 1.0f);
+
+	// var h = 4.0f;
+	var h = uniforms.h;
+	var a = uniforms.a;
+	var d = uniforms.d;
+	createYarn(invocationID.x, h, a, d, vec3<f32>(-20.0f, 0.0f * h - 5.0f, 0.0f));
+	createYarn(invocationID.x, h, a, d, vec3<f32>(-20.0f, 1.0f * h - 5.0f, 0.0f));
+	createYarn(invocationID.x, h, a, d, vec3<f32>(-20.0f, 2.0f * h - 5.0f, 0.0f));
+	createYarn(invocationID.x, h, a, d, vec3<f32>(-20.0f, 3.0f * h - 5.0f, 0.0f));
 }
 `;
 
@@ -172,7 +257,7 @@ const uniformBufferSize = 256;
 
 let states = new Map();
 
-function getState(model, renderer){
+function getState(model, lines, renderer){
 
 	if(!states.has(model)){
 		let {device} = renderer;
@@ -199,6 +284,8 @@ function getState(model, renderer){
 				{binding: 1, resource: {buffer: model.positions}},
 				{binding: 2, resource: {buffer: model.colors}},
 				{binding: 3, resource: {buffer: model.indirect}},
+				{binding: 4, resource: {buffer: lines.indirect}},
+				{binding: 5, resource: {buffer: lines.buffer}},
 			],
 		});
 
@@ -216,11 +303,20 @@ function getState(model, renderer){
 
 function update(state, renderer, model){
 
+	let el_h = document.getElementById("val_h");
+	let el_a = document.getElementById("val_a");
+	let el_d = document.getElementById("val_d");
+	let el_thickness = document.getElementById("val_thickness");
+
 	let data = new ArrayBuffer(256);
 	let view = new DataView(data);
 
-	view.setUint32(0, numWorkgroups, true);
-	view.setUint32(4, workgroupSize, true);
+	view.setUint32(  0, numWorkgroups, true);
+	view.setUint32(  4, workgroupSize, true);
+	view.setFloat32( 8, el_h.value, true);
+	view.setFloat32(12, el_a.value, true);
+	view.setFloat32(16, el_d.value, true);
+	view.setFloat32(20, el_thickness.value, true);
 
 	renderer.device.queue.writeBuffer(
 		state.uniformBuffer, 
@@ -228,7 +324,7 @@ function update(state, renderer, model){
 
 }
 
-function resetIndirect(state, renderer, model){
+function resetIndirect(state, renderer, model, lines){
 
 	let data = new ArrayBuffer(16);
 	let view = new DataView(data);
@@ -242,15 +338,19 @@ function resetIndirect(state, renderer, model){
 		model.indirect, 
 		0, data, 0, data.byteLength);
 
+	renderer.device.queue.writeBuffer(
+		lines.indirect, 
+		0, data, 0, data.byteLength);
+
 }
 
 
-export function computeYarn(model, view, renderer, commandEncoder){
+export function computeYarn(model, lines, view, renderer, commandEncoder){
 
-	let state = getState(model, renderer);
+	let state = getState(model, lines, renderer);
 
 	update(state, renderer, model);
-	resetIndirect(state, renderer, model);
+	resetIndirect(state, renderer, model, lines);
 
 	let passEncoder = commandEncoder.beginComputePass();
 

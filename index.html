@@ -29,7 +29,23 @@ body{
 
 <div style="display: grid; width: 100%; height: 100%; grid-template-columns: 400px 1fr">
 	<div id="rendermode_container">
-		<b>Render Mode</b>
+		
+		<div>
+			<input type="range" id="val_h" name="h" min="0" max="5" step="0.1" value="4.0">
+			<label for="h">h</label>
+		</div>
+		<div>
+			<input type="range" id="val_a" name="a" min="0" max="5" step="0.1" value="1.5">
+			<label for="a">a</label>
+		</div>
+		<div>
+			<input type="range" id="val_d" name="d" min="0" max="5" step="0.1" value="1.0">
+			<label for="d">d</label>
+		</div>
+		<div>
+			<input type="range" id="val_thickness" name="thickness" min="0.1" max="5" step="0.1" value="1.0">
+			<label for="thickness">thickness</label>
+		</div>
 
 		<a href="https://github.com/m-schuetz/webgpu_wireframe_thicklines">[github]</a>
 	</div>
@@ -47,13 +63,14 @@ body{
 	import {cube} from "./cube.js";
 	import {mat4, vec3} from "./libs/gl-matrix/gl-matrix.js";
 	import {renderMesh} from "./renderMesh.js";
+	import {renderLines} from "./renderLines.js";
 	import {computeYarn} from "./computeYarn.js";
 	import {createRenderer} from "./renderer.js";
 
 	let canvas  = document.getElementById("canvas");
 	let renderer = await createRenderer(canvas);
 
-	let vertexCapacity = 300_000;
+	let vertexCapacity = 500_000;
 	let bufIndirect = renderer.device.createBuffer({
 		size: 512,
 		usage: GPUBufferUsage.VERTEX 
@@ -92,6 +109,35 @@ body{
 		indirect: bufIndirect
 	};
 
+	let bufIndirectLines = renderer.device.createBuffer({
+		size: 512,
+		usage: GPUBufferUsage.VERTEX 
+			| GPUBufferUsage.INDEX  
+			| GPUBufferUsage.COPY_DST 
+			| GPUBufferUsage.COPY_SRC 
+			| GPUBufferUsage.STORAGE
+			| GPUBufferUsage.INDIRECT,
+		mappedAtCreation: false,
+	});
+
+	let linesCapacity = 300_000;
+	let bufLines = renderer.device.createBuffer({
+		size: 32 * linesCapacity,
+		usage: GPUBufferUsage.VERTEX 
+			| GPUBufferUsage.INDEX  
+			| GPUBufferUsage.COPY_DST 
+			| GPUBufferUsage.COPY_SRC 
+			| GPUBufferUsage.STORAGE,
+		mappedAtCreation: false,
+	});
+	let lines = {
+		linesCapacity,
+		indirect: bufIndirectLines,
+		buffer: bufLines,
+	};
+
+	// let el_h = document.getElementById("val_h");
+
 	function loop(){
 
 		let renderPassDescriptor = {
@@ -117,20 +163,17 @@ body{
 		let elQuads = document.getElementById("rendermode_quads");
 
 		let view = mat4.create();
-		mat4.translate(view, view, vec3.fromValues(0, 0, -4));
+		mat4.translate(view, view, vec3.fromValues(0, 0, -30));
 		let now = performance.now() / 3000;
-		// now = 0.2;
+		// now = .294;
 		mat4.rotate(view, view, now, vec3.fromValues(0, 1, 0));
 
 
-		
-
-		
-
-		computeYarn(model, view, renderer, commandEncoder);
+		computeYarn(model, lines, view, renderer, commandEncoder);
 
 		let passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
 		renderMesh(model, view, renderer, passEncoder);
+		renderLines(lines, view, renderer, passEncoder);
 
 		passEncoder.end();
 		let commandBuffer = commandEncoder.finish();
