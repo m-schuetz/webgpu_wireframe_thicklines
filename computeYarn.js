@@ -1,7 +1,7 @@
 
 import {mat4, vec3} from "./libs/gl-matrix/gl-matrix.js";
 
-let numWorkgroups = 3;
+let numWorkgroups = 5;
 let workgroupSize = 128;
 
 let shaderCode = `
@@ -12,6 +12,7 @@ struct Uniforms {
 	a               : f32,
 	d               : f32,
 	thickness       : f32,
+	numRows         : u32,
 };
 
 struct U32s {
@@ -54,11 +55,6 @@ struct VertexOutput {
 };
 
 fn sample(t : f32, h : f32, a : f32, d : f32) -> vec3<f32> {
-
-	// var h = 1.0f;
-	// var a = 1.0f;
-	// var d = 1.0f;
-
 	var x = t + a * sin(2.0f * t);
 	var y = h * cos(t);
 	var z = d * cos(2.0f * t);
@@ -78,7 +74,7 @@ fn drawLine(start : vec3<f32>, end : vec3<f32>, color : u32){
 }
 
 fn createYarn(threadID : u32, h : f32, a : f32, d : f32, offset : vec3<f32>){
-	// var r = 1.0f;
+
 	var r = uniforms.thickness;
 	var scale = 1.0f;
 	var factor = 40.0f;
@@ -88,50 +84,60 @@ fn createYarn(threadID : u32, h : f32, a : f32, d : f32, offset : vec3<f32>){
 	var trisPerSeg = sides * 2u;
 	var verticesPerSec = trisPerSeg * 3u;
 
-	// var index = invocationID.x;
 	var index = threadID;
 	var PI = 3.1415f;
 
 	// segment index in target buffer
 	var targetIndex = atomicAdd(&indirectArgs.vertexCount, verticesPerSec) / verticesPerSec;
 
-	_ = uniforms.numWorkgroups;
+	var epsilon = 0.001f;
 
-	var numThreads = uniforms.numWorkgroups * uniforms.workgroupSize;
-	numThreads = ${numWorkgroups * workgroupSize}u;
+	var numThreads = ${numWorkgroups * workgroupSize}u;
+
 	var u0 = (f32(index) + 0.0f) / f32(numThreads);
 	var u1 = (f32(index) + 1.0f) / f32(numThreads);
 
 	var up = vec3<f32>(0.0f, 1.0f, 0.0f);
-	var l0 = sample(factor * u0, h, a, d);
-	var l1 = sample(factor * u1, h, a, d);
 
-	var dir = normalize(l1 - l0);
-	var N = normalize(cross(dir, up));
-	var T = normalize(cross(N, dir));
+	var s0  = sample(factor * (f32(index) - 1.0f) / f32(numThreads), h, a, d);
+	var s05 = sample(factor * (f32(index) - 0.5f) / f32(numThreads), h, a, d);
+	var s1  = sample(factor * (f32(index) + 0.0f) / f32(numThreads), h, a, d);
+	var s15 = sample(factor * (f32(index) + 0.5f) / f32(numThreads), h, a, d);
+	var s2  = sample(factor * (f32(index) + 1.0f) / f32(numThreads), h, a, d);
+
+	var d_01 = normalize(s1 - s0);
+	var d_12 = normalize(s2 - s1);
+	var N_01 = normalize(cross(d_01, up));
+	var N_12 = normalize(cross(d_12, up));
+	var T_01 = normalize(cross(N_01, d_01));
+	var T_12 = normalize(cross(N_12, d_12));
+
+	// some lines as debug output
+	drawLine(s0 * scale + offset, s1 * scale + offset, 0x0000ff00);
+	drawLine((s0 + N_01) * scale + offset, s0 * scale + offset, 0x000000ff);
+	drawLine((s0 + T_01) * scale + offset, s0 * scale + offset, 0x0000ffff);
+	drawLine((s1 + N_12) * scale + offset, s1 * scale + offset, 0x000000ff);
+	drawLine((s1 + T_12) * scale + offset, s1 * scale + offset, 0x0000ffff);
 
 	for(var i = 0u; i < sides; i++){
 
 		var v0 = f32(i + 0u) / f32(sides);
 		var v1 = f32(i + 1u) / f32(sides);
 
-		var c0 = T * cos(2.0f * PI * v0) + N * sin(2.0f * PI * v0);
-		var c1 = T * cos(2.0f * PI * v1) + N * sin(2.0f * PI * v1);
+		var c0 = T_01 * cos(2.0f * PI * v0) + N_01 * sin(2.0f * PI * v0);
+		var c1 = T_01 * cos(2.0f * PI * v1) + N_01 * sin(2.0f * PI * v1);
+		var c10 = T_12 * cos(2.0f * PI * v0) + N_12 * sin(2.0f * PI * v0);
+		var c11 = T_12 * cos(2.0f * PI * v1) + N_12 * sin(2.0f * PI * v1);
 
-		var p3 = l0 + r * c0;
-		var p2 = l1 + r * c0;
-		var p1 = l1 + r * c1;
-		var p0 = l0 + r * c1;
+		var p3 = s05 + r * c0;
+		var p2 = s15 + r * c10;
+		var p1 = s15 + r * c11;
+		var p0 = s05 + r * c1;
 
 		p3 = scale * p3 + offset;
 		p2 = scale * p2 + offset;
 		p1 = scale * p1 + offset;
 		p0 = scale * p0 + offset;
-
-		// some lines as debug output
-		drawLine(l0 * scale + offset, l1 * scale + offset, 0x000000ff);
-		drawLine(l0 + offset, l0 + offset + 1.5f * N, 0x0000ffff);
-		drawLine(l0 + offset, l0 + offset + 1.5f * T, 0x00ff0000);
 
 		// each side generates 
 		// - two tris
@@ -194,8 +200,6 @@ fn createYarn(threadID : u32, h : f32, a : f32, d : f32, offset : vec3<f32>){
 @compute @workgroup_size(${workgroupSize})
 fn main(@builtin(global_invocation_id) invocationID : vec3<u32>){
 
-
-
 	_ = indirectArgsLines.instanceCount;
 	_ = lines[0];
 
@@ -205,17 +209,13 @@ fn main(@builtin(global_invocation_id) invocationID : vec3<u32>){
 		indirectArgs.firstInstance = 0u;
 	}
 
-	// createYarn(invocationID.x, 1.0f, 1.0f, 1.0f);
-	// createYarn(invocationID.x, 2.0f, 1.0f, 1.0f);
-
-	// var h = 4.0f;
 	var h = uniforms.h;
 	var a = uniforms.a;
 	var d = uniforms.d;
-	createYarn(invocationID.x, h, a, d, vec3<f32>(-20.0f, 0.0f * h - 5.0f, 0.0f));
-	// createYarn(invocationID.x, h, a, d, vec3<f32>(-20.0f, 1.0f * h - 5.0f, 0.0f));
-	// createYarn(invocationID.x, h, a, d, vec3<f32>(-20.0f, 2.0f * h - 5.0f, 0.0f));
-	// createYarn(invocationID.x, h, a, d, vec3<f32>(-20.0f, 3.0f * h - 5.0f, 0.0f));
+
+	for(var i = 0u; i < uniforms.numRows; i++){
+		createYarn(invocationID.x, h, a, d, vec3<f32>(-20.0f, f32(i) * h - 5.0f, 0.0f));
+	}
 }
 `;
 
@@ -274,6 +274,7 @@ function update(state, renderer, model){
 	let el_a = document.getElementById("val_a");
 	let el_d = document.getElementById("val_d");
 	let el_thickness = document.getElementById("val_thickness");
+	let el_numRows = document.getElementById("val_num_rows");
 
 	let data = new ArrayBuffer(256);
 	let view = new DataView(data);
@@ -284,6 +285,7 @@ function update(state, renderer, model){
 	view.setFloat32(12, el_a.value, true);
 	view.setFloat32(16, el_d.value, true);
 	view.setFloat32(20, el_thickness.value, true);
+	view.setUint32( 24, el_numRows.value, true);
 
 	renderer.device.queue.writeBuffer(
 		state.uniformBuffer, 
